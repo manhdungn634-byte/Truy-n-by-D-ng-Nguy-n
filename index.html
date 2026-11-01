@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tủ Truyện</title>
+<meta name="theme-color" content="#2A5C7A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tủ Truyện">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400..700;1,7..72,400..700&display=swap" rel="stylesheet">
+<style>
+  /* Bố cục: một cột hẹp như trang sách, thanh công cụ dính trên, thanh chuyển chương dính dưới. */
+  :root {
+    --paper: #F1F3EE;
+    --surface: #FAFBF8;
+    --ink: #1D2227;
+    --ink-soft: #596168;
+    --line: #D8DCD4;
+    --accent: #2A5C7A;
+    --accent-ink: #FFFFFF;
+    --danger: #A5352B;
+    --font-ui: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-serif: 'Literata', Georgia, 'Times New Roman', serif;
+    --read-font: var(--font-serif);
+    --fs: 19px;
+    --lh: 1.8;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --paper: #12161A; --surface: #1A1F24; --ink: #E3E6E1; --ink-soft: #99A2A9;
+      --line: #2B323A; --accent: #7FB2D1; --accent-ink: #0E1418; --danger: #E58A80;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #12161A; --surface: #1A1F24; --ink: #E3E6E1; --ink-soft: #99A2A9;
+    --line: #2B323A; --accent: #7FB2D1; --accent-ink: #0E1418; --danger: #E58A80;
+    color-scheme: dark;
+  }
+  :root[data-theme="sepia"] {
+    --paper: #E8DFCB; --surface: #F0E8D6; --ink: #3A3027; --ink-soft: #7A6A58;
+    --line: #D3C6AB; --accent: #7A4B2A; --accent-ink: #FFF8EA; --danger: #9A3324;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 16px/1.55 var(--font-ui);
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  .wrap {
+    width: 100%;
+    max-width: 44rem;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Thanh trên */
+  #bar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  #bar .wrap { display: flex; align-items: center; gap: 8px; height: 3.25rem; }
+  #bar-title {
+    flex: 1; min-width: 0;
+    font: 600 1rem/1.2 var(--font-ui);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .icon-btn {
+    flex: none; width: 2.5rem; height: 2.5rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; background: transparent; border-radius: 8px;
+  }
+  .icon-btn:hover { background: var(--line); }
+  .icon-btn svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--accent); }
+
+  main { padding-block: 24px 96px; }
+
+  h1, h2 { font-family: var(--font-serif); text-wrap: balance; margin: 0; }
+  .eyebrow { font: 500 0.75rem/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .muted { color: var(--ink-soft); }
+  .small { font-size: 0.875rem; }
+
+  /* Màn hình kết nối */
+  .setup h1 { font-size: 2.1rem; line-height: 1.15; font-weight: 600; margin-top: 8px; }
+  .setup p { max-width: 36rem; }
+  form { display: grid; gap: 16px; margin-top: 24px; }
+  label { display: grid; gap: 6px; font-weight: 500; font-size: 0.9rem; }
+  input[type=text], input[type=password] {
+    width: 100%; font: 400 16px var(--font-ui);
+    padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); color: var(--ink);
+  }
+  .hint { font-weight: 400; font-size: 0.8125rem; color: var(--ink-soft); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 11px 18px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); font-weight: 500; font-size: 0.95rem;
+  }
+  .btn:hover { border-color: var(--ink-soft); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn[aria-disabled=true] { opacity: 0.4; pointer-events: none; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  details { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 14px; }
+  summary { cursor: pointer; font-weight: 500; }
+  details ol { padding-left: 1.2rem; margin: 12px 0 0; display: grid; gap: 8px; }
+  code { font: 500 0.85em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--line); padding: 1px 5px; border-radius: 4px; }
+
+  /* Danh sách */
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 28px 0 4px; }
+  .section-head h2 { font-size: 1.25rem; font-weight: 600; }
+  .list { margin: 0; padding: 0; list-style: none; }
+  .list li { border-bottom: 1px solid var(--line); }
+  .item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 4px; }
+  .item:hover { background: color-mix(in srgb, var(--line) 45%, transparent); }
+  .item-title { font: 500 1.05rem/1.35 var(--font-serif); min-width: 0; overflow-wrap: anywhere; }
+  .item-meta { font-size: 0.8125rem; color: var(--ink-soft); white-space: nowrap; }
+  .item.current .item-title { color: var(--accent); }
+  .tag { font-size: 0.75rem; font-weight: 600; color: var(--accent); }
+
+  .resume {
+    display: grid; gap: 6px; padding: 16px 18px; border-radius: 10px;
+    background: var(--accent); color: var(--accent-ink);
+  }
+  .resume .eyebrow { color: inherit; opacity: 0.8; }
+  .resume strong { font: 600 1.15rem/1.3 var(--font-serif); }
+  .story-head h1 { font-size: 1.9rem; line-height: 1.2; font-weight: 600; }
+  .story-head { display: grid; gap: 10px; margin-bottom: 18px; }
+  .demo-note { margin-top: 28px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 10px; }
+
+  .state { padding: 48px 0; text-align: center; color: var(--ink-soft); }
+  .error { padding: 16px; border: 1px solid var(--danger); border-radius: 10px; display: grid; gap: 12px; }
+  .error strong { color: var(--danger); }
+
+  /* Trang đọc */
+  article.reader {
+    font-family: var(--read-font); font-size: var(--fs); line-height: var(--lh);
+    max-width: 38rem; margin: 0 auto;
+    overflow-wrap: break-word; hyphens: manual;
+  }
+  article.reader h1 { font-size: 1.35em; line-height: 1.3; font-weight: 650; margin: 0.4em 0 1.2em; }
+  article.reader p { margin: 0 0 1em; }
+
+  #reader-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    background: var(--paper); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #reader-nav .wrap { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; padding-block: 8px; max-width: 38rem; }
+  #reader-nav .btn { padding: 10px 12px; }
+  #reader-nav .btn:last-child { justify-self: end; }
+  #reader-nav .btn.primary { min-width: 7.5rem; }
+
+  /* Cài đặt */
+  #sheet-backdrop { position: fixed; inset: 0; z-index: 30; }
+  #sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 31;
+    background: var(--surface); border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,0.18);
+    padding-top: 14px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-height: 80vh; overflow-y: auto;
+  }
+  #sheet .wrap { display: grid; gap: 18px; max-width: 34rem; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; }
+  .sheet-head h2 { font-size: 1.1rem; }
+  .ctl { display: grid; gap: 8px; }
+  .ctl-top { display: flex; justify-content: space-between; font-size: 0.875rem; font-weight: 500; }
+  .ctl-top output { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+  .seg button { padding: 9px 6px; border: 1px solid var(--line); background: transparent; border-radius: 8px; font-size: 0.875rem; }
+  .seg button[aria-pressed=true] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+  .link-btn { border: 0; background: none; padding: 6px 0; text-align: left; font-size: 0.9rem; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; }
+
+  .search {
+    width: 100%; font: 400 16px var(--font-ui);
+    padding: 10px 12px; margin: 8px 0 4px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--surface); color: var(--ink);
+  }
+  .dl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .dl-row .btn { font-size: 0.875rem; padding: 8px 14px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .item, .btn { transition: background-color .15s, border-color .15s, filter .15s; }
+  }
+</style>
+</head>
+<body>
+
+<header id="bar">
+  <div class="wrap">
+    <a id="back" class="icon-btn" href="#/" aria-label="Quay lại" hidden>
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div id="bar-title">Tủ Truyện</div>
+    <button id="btn-settings" class="icon-btn" type="button" aria-label="Cài đặt đọc" hidden>
+      <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </div>
+  <div id="progress"></div>
+</header>
+
+<main class="wrap" id="view"><div class="state">Đang tải…</div></main>
+
+<nav id="reader-nav" hidden aria-label="Chuyển chương">
+  <div class="wrap">
+    <a class="btn" id="nav-prev" href="#/">← Trước</a>
+    <a class="btn" id="nav-toc" href="#/">Mục lục</a>
+    <a class="btn primary" id="nav-next" href="#/">Sau →</a>
+  </div>
+</nav>
+
+<div id="sheet-backdrop" hidden></div>
+<section id="sheet" hidden aria-label="Cài đặt đọc">
+  <div class="wrap">
+    <div class="sheet-head">
+      <h2>Cài đặt đọc</h2>
+      <button class="icon-btn" id="sheet-close" type="button" aria-label="Đóng">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="ctl">
+      <div class="ctl-top"><label for="fs">Cỡ chữ</label><output id="fs-out"></output></div>
+      <input id="fs" type="range" min="15" max="30" step="1">
+    </div>
+    <div class="ctl">
+      <div class="ctl-top"><label for="lh">Giãn dòng</label><output id="lh-out"></output></div>
+      <input id="lh" type="range" min="1.4" max="2.4" step="0.1">
+    </div>
+    <div class="ctl">
+      <div class="ctl-top">Phông chữ</div>
+      <div class="seg" id="seg-font">
+        <button type="button" data-v="serif">Có chân</button>
+        <button type="button" data-v="sans">Không chân</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-top">Giao diện</div>
+      <div class="seg" id="seg-theme">
+        <button type="button" data-v="auto">Tự động</button>
+        <button type="button" data-v="light">Sáng</button>
+        <button type="button" data-v="dark">Tối</button>
+        <button type="button" data-v="sepia">Giấy</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <button class="link-btn" id="btn-reset-cfg" type="button">Đổi nguồn Google Drive</button>
+      <button class="link-btn" id="btn-clear-progress" type="button">Xóa tiến độ đọc trên máy này</button>
+      <button class="link-btn" id="btn-clear-offline" type="button">Xóa truyện đã tải về máy</button>
+    </div>
+  </div>
+</section>
+
+<noscript><p class="wrap">Trang này cần bật JavaScript.</p></noscript>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Tiện ích ---------- */
+  var FOLDER = 'application/vnd.google-apps.folder';
+  var DOC = 'application/vnd.google-apps.document';
+  var API = 'https://www.googleapis.com/drive/v3';
+
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) {} },
+    keys: function () { try { return Object.keys(localStorage); } catch (e) { return []; } }
+  };
+
+  function h(tag, props) {
+    var el = document.createElement(tag);
+    var p = props || {};
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      if (v === false || v == null) return;
+      if (k === 'class') el.className = v;
+      else if (k.indexOf('on') === 0) el.addEventListener(k.slice(2), v);
+      else if (v === true) el.setAttribute(k, '');
+      else el.setAttribute(k, v);
+    });
+    for (var i = 2; i < arguments.length; i++) append(el, arguments[i]);
+    return el;
+  }
+  function append(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) { c.forEach(function (x) { append(el, x); }); return; }
+    el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  var $ = function (s) { return document.querySelector(s); };
+
+  function byName(a, b) { return a.name.localeCompare(b.name, 'vi', { numeric: true, sensitivity: 'base' }); }
+  function isFolder(f) { return f.mimeType === FOLDER; }
+  function isChapter(f) { return f.mimeType === DOC || /^text\//.test(f.mimeType) || /\.txt$/i.test(f.name); }
+  function cleanName(n) { return n.replace(/\.txt$/i, ''); }
+  function link() {
+    return '#/' + Array.prototype.map.call(arguments, encodeURIComponent).join('/');
+  }
+
+  /* ---------- Dữ liệu mẫu ---------- */
+  var DEMO = {
+    stories: [
+      { id: 'demo-1', name: 'Con đò cuối bến', mimeType: FOLDER },
+      { id: 'demo-2', name: 'Thư gửi mùa mưa', mimeType: FOLDER }
+    ],
+    chapters: {
+      'demo-1': [
+        { id: 'd1c1', name: 'Chương 1 - Bến sông lúc sương', mimeType: DOC },
+        { id: 'd1c2', name: 'Chương 2 - Người khách đầu tiên', mimeType: DOC },
+        { id: 'd1c3', name: 'Chương 3 - Tiền đò', mimeType: DOC }
+      ],
+      'demo-2': [
+        { id: 'd2c1', name: 'Lá thư thứ nhất', mimeType: DOC },
+        { id: 'd2c2', name: 'Lá thư thứ hai', mimeType: DOC }
+      ]
+    },
+    text: {
+      d1c1: [
+        'Sương xuống dày từ lúc gà chưa gáy. Ông Bảy đứng ở đầu cầu ván, hai tay xoa vào nhau, nhìn mặt sông trắng như sữa.',
+        'Con đò nằm im, buộc vào cọc tre đã mục đi một nửa. Mỗi lần nước lớn, nó lại gõ vào cọc một tiếng, như người già gõ tẩu thuốc.',
+        'Hồi trước giờ này bến đã đông. Bà bán rau, mấy chị đi chợ phiên, cậu học trò ôm cặp trong áo mưa. Giờ chỉ còn một con chó vàng nằm dưới gốc bàng, thỉnh thoảng ngóc đầu lên nghe ngóng.',
+        'Cầu mới bắc ở cách đây ba cây số. Người ta bảo đi xe nhanh hơn, và người ta nói đúng. Ông Bảy không cãi, chỉ buổi sáng vẫn ra bến, vì ra rồi thì ở nhà cũng chẳng còn việc gì khác.',
+        'Tiếng bước chân vọng lại trên ván cầu. Ông quay lại, thấy một cô gái trẻ kéo chiếc vali nhỏ, tóc ướt sương.',
+        '- Chú ơi, đò còn chạy không chú?',
+        'Ông Bảy nhìn cô, nhìn con đò, rồi nhìn con chó vàng. Con chó vẫy đuôi một cái, coi như đã quyết định thay ông.'
+      ].join('\n\n'),
+      d1c2: [
+        'Cô gái tên Vy, về quê lo giấy tờ cho mảnh vườn của bà ngoại. Cô nói vậy khi ông Bảy hỏi, còn chuyện bên kia sông có ai chờ hay không thì cô không nhắc tới.',
+        'Ông chống sào đẩy đò ra khỏi bến. Sương mỏng dần theo từng nhịp chèo, để lộ hàng dừa nước nghiêng nghiêng hai bên bờ.',
+        '- Lâu lắm rồi cháu mới đi đò, - Vy nói. - Hồi nhỏ cháu tưởng sông này rộng lắm.',
+        '- Sông vẫn vậy. Cháu lớn lên thôi.',
+        'Vy cười, lần đầu tiên từ lúc xuống xe. Con chó vàng nhảy lên mũi đò lúc nào không ai hay, ngồi canh phía trước như một hoa tiêu.'
+      ].join('\n\n'),
+      d1c3: [
+        'Tới bờ bên kia, Vy móc ví hỏi giá. Ông Bảy nghĩ một lúc rồi nói năm nghìn, đúng giá từ hồi ông còn trẻ.',
+        '- Chú nói nhầm rồi, bây giờ đi đâu cũng ba chục. - Vy đưa tờ năm chục.',
+        '- Tiền đò tính theo con nước chứ không tính theo thời giá, - ông bảo, và nhất định chỉ nhận một tờ năm nghìn nhàu nát.',
+        'Vy đành chịu. Cô đứng trên bờ nhìn ông chèo ngược lại, cái bóng nhỏ dần trong nắng mới lên.'
+      ].join('\n\n'),
+      d2c1: [
+        'Gửi Minh,',
+        'Hôm nay trời mưa từ sáng. Mình ngồi bên cửa sổ đếm xem bao nhiêu giọt chạy xuống kính trước khi chạm vào nhau. Tới giọt thứ mười một thì mình quên mất đang đếm gì.',
+        'Cậu hỏi mình sống ở đây có buồn không. Không hẳn. Chỉ là mưa làm mọi thứ chậm lại, kể cả nỗi nhớ.'
+      ].join('\n\n'),
+      d2c2: [
+        'Gửi Minh,',
+        'Thư trước mình viết xong rồi để quên trong cuốn sổ. Hôm nay lật ra thấy nó vẫn nằm đó, mép giấy hơi quăn vì ẩm.',
+        'Mình sẽ gửi cả hai lá cùng lúc. Cậu đọc lần lượt, hoặc đọc ngược cũng được. Mưa thì đằng nào cũng đến muộn.'
+      ].join('\n\n')
+    }
+  };
+
+  /* ---------- Trạng thái ---------- */
+  var cfg = store.get('cfg', null); // { key, folder } hoặc { demo: true }
+  var prefs = Object.assign({ fs: 19, lh: 1.8, font: 'serif', theme: 'auto', desc: false }, store.get('prefs', {}));
+  var state = { stories: null, chapters: {}, texts: {} };
+  var navId = 0;
+  var reader = null; // trạng thái trang đọc hiện tại
+
+  /* ---------- Lớp lấy dữ liệu ---------- */
+  function DriveError(status, detail) { this.status = status; this.detail = detail || ''; }
+
+  function driveJson(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          throw new DriveError(r.status, j && j.error && j.error.message);
+        });
+      }
+      return r.json();
+    });
+  }
+  function driveText(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function () { throw new DriveError(r.status, ''); });
+      }
+      return r.text();
+    });
+  }
+
+  function listFolder(id) {
+    if (cfg.demo) {
+      return Promise.resolve(id === 'demo-root' ? DEMO.stories : (DEMO.chapters[id] || []));
+    }
+    var all = [];
+    function page(token) {
+      var q = "'" + id + "' in parents and trashed=false";
+      var url = API + '/files?q=' + encodeURIComponent(q) +
+        '&fields=' + encodeURIComponent('nextPageToken,files(id,name,mimeType)') +
+        '&orderBy=name&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true' +
+        '&key=' + encodeURIComponent(cfg.key) + (token ? '&pageToken=' + encodeURIComponent(token) : '');
+      return driveJson(url).then(function (j) {
+        all = all.concat(j.files || []);
+        return j.nextPageToken ? page(j.nextPageToken) : all;
+      });
+    }
+    return page('').then(function (files) {
+      cachePut('list:' + id, JSON.stringify(files));
+      return files;
+    }).catch(function (e) {
+      if (e instanceof DriveError) throw e;
+      return cacheGet('list:' + id).then(function (t) {
+        if (t == null) throw e;
+        return JSON.parse(t);
+      });
+    });
+  }
+
+  /* Bản lưu trên máy để đọc khi mất mạng */
+  var CACHE = 'tutruyen-data-v1';
+  function cacheReq(key) { return new Request('/__data/' + encodeURIComponent(key)); }
+  function cachePut(key, text) {
+    if (!window.caches || cfg.demo) return Promise.resolve();
+    return caches.open(CACHE).then(function (c) { return c.put(cacheReq(key), new Response(text)); }).catch(function () {});
+  }
+  function cacheGet(key) {
+    if (!window.caches) return Promise.resolve(null);
+    return caches.open(CACHE).then(function (c) { return c.match(cacheReq(key)); })
+      .then(function (r) { return r ? r.text() : null; }).catch(function () { return null; });
+  }
+
+  function fold(s) {
+    return String(s).toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+  function searchBox(label, onChange) {
+    var inp = h('input', { type: 'search', class: 'search', id: 'q', placeholder: label, 'aria-label': label, autocomplete: 'off', spellcheck: 'false' });
+    inp.addEventListener('input', function () { onChange(fold(inp.value.trim())); });
+    return inp;
+  }
+
+  function fetchText(file, force) {
+    if (!force && state.texts[file.id] != null) return Promise.resolve(state.texts[file.id]);
+    var p;
+    if (cfg.demo) {
+      p = Promise.resolve(DEMO.text[file.id] || '');
+    } else if (file.mimeType === DOC) {
+      p = driveText(API + '/files/' + file.id + '/export?mimeType=text%2Fplain&key=' + encodeURIComponent(cfg.key));
+    } else {
+      p = driveText(API + '/files/' + file.id + '?alt=media&supportsAllDrives=true&key=' + encodeURIComponent(cfg.key));
+    }
+    if (!cfg.demo) {
+      p = p.then(function (t) { cachePut('text:' + file.id, t); return t; }).catch(function (e) {
+        if (e instanceof DriveError) throw e;
+        return cacheGet('text:' + file.id).then(function (t) { if (t == null) throw e; return t; });
+      });
+    }
+    return p.then(function (t) {
+      t = t.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+      state.texts[file.id] = t;
+      return t;
+    });
+  }
+
+  function rootId() { return cfg.demo ? 'demo-root' : cfg.folder; }
+
+  function loadStories() {
+    if (state.stories) return Promise.resolve(state.stories);
+    return listFolder(rootId()).then(function (files) {
+      var folders = files.filter(isFolder).sort(byName);
+      if (folders.length) { state.stories = folders; return folders; }
+      var chs = files.filter(isChapter).sort(byName);
+      if (!chs.length) throw new Error('Thư mục này chưa có thư mục truyện hoặc tệp chương nào. Hãy tạo mỗi truyện thành một thư mục con, mỗi chương một tệp.');
+      state.chapters[rootId()] = chs;
+      state.stories = [{ id: rootId(), name: 'Truyện của bạn', mimeType: FOLDER }];
+      return state.stories;
+    });
+  }
+
+  function loadChapters(sid) {
+    if (state.chapters[sid]) return Promise.resolve(state.chapters[sid]);
+    return listFolder(sid).then(function (files) {
+      var chs = files.filter(isChapter).sort(byName);
+      state.chapters[sid] = chs;
+      return chs;
+    });
+  }
+
+  function explain(e) {
+    if (e instanceof DriveError) {
+      if (e.status === 400) return 'API key không hợp lệ hoặc ID thư mục sai.';
+      if (e.status === 403) return 'Google từ chối truy cập. Kiểm tra lại: đã bật Google Drive API, API key cho phép tên miền của trang này, thư mục đã chia sẻ ở chế độ "Bất kỳ ai có đường liên kết", và chưa vượt hạn mức.';
+      if (e.status === 404) return 'Không tìm thấy thư mục hoặc tệp. Kiểm tra lại ID và quyền chia sẻ.';
+      return 'Google Drive trả về lỗi ' + e.status + (e.detail ? ': ' + e.detail : '') + '.';
+    }
+    if (e instanceof TypeError) {
+      return 'Không kết nối được tới Google Drive. Kiểm tra mạng. Nếu bạn mở trang trực tiếp từ tệp trên máy (file://) thì API key giới hạn theo tên miền sẽ không chạy: hãy chạy qua localhost hoặc đưa trang lên web.';
+    }
+    return e && e.message ? e.message : 'Đã có lỗi không rõ.';
+  }
+
+  /* ---------- Tiến độ đọc ---------- */
+  function getProgress(sid) { return store.get('progress:' + sid, null); }
+  function saveProgress(sid, data) { store.set('progress:' + sid, data); }
+
+  /* ---------- Giao diện chung ---------- */
+  var view = $('#view');
+
+  function setBar(opts) {
+    var back = $('#back');
+    if (opts.back) { back.hidden = false; back.setAttribute('href', opts.back); } else { back.hidden = true; }
+    $('#bar-title').textContent = opts.title || 'Tủ Truyện';
+    $('#btn-settings').hidden = !opts.settings;
+    $('#reader-nav').hidden = !opts.nav;
+    $('#progress').style.width = '0';
+    document.title = opts.title && opts.title !== 'Tủ Truyện' ? opts.title + ' · Tủ Truyện' : 'Tủ Truyện';
+  }
+  function show() {
+    view.replaceChildren.apply(view, arguments);
+  }
+  function loading() { show(h('div', { class: 'state' }, 'Đang tải…')); }
+
+  function showError(e) {
+    reader = null;
+    setBar({ title: 'Tủ Truyện' });
+    show(h('div', { class: 'error' },
+      h('strong', null, 'Không mở được'),
+      h('div', null, explain(e)),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', type: 'button', onclick: function () { state = { stories: null, chapters: {}, texts: {} }; route(); } }, 'Thử lại'),
+        h('button', { class: 'btn', type: 'button', onclick: resetConfig }, 'Sửa cấu hình')
+      )
+    ));
+  }
+
+  /* ---------- Màn hình kết nối ---------- */
+  function parseFolder(input) {
+    var m = input.match(/folders\/([A-Za-z0-9_-]+)/) || input.match(/[?&]id=([A-Za-z0-9_-]+)/);
+    return m ? m[1] : input.trim();
+  }
+
+  function viewSetup() {
+    reader = null;
+    setBar({ title: 'Tủ Truyện' });
+    var saved = cfg && !cfg.demo ? cfg : { key: '', folder: '' };
+    var keyIn = h('input', { id: 'in-key', type: 'password', autocomplete: 'off', spellcheck: 'false', value: saved.key || '', required: true });
+    var folderIn = h('input', { id: 'in-folder', type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Dán đường liên kết hoặc ID thư mục', value: saved.folder || '', required: true });
+
+    var form = h('form', {
+      onsubmit: function (ev) {
+        ev.preventDefault();
+        var key = keyIn.value.trim(), folder = parseFolder(folderIn.value);
+        if (!key || !folder) return;
+        cfg = { key: key, folder: folder };
+        store.set('cfg', cfg);
+        state = { stories: null, chapters: {}, texts: {} };
+        if (location.hash && location.hash !== '#/' && location.hash !== '#') location.hash = '#/'; else route();
+      }
+    },
+      h('label', { for: 'in-key' }, 'Google API key',
+        keyIn,
+        h('span', { class: 'hint' }, 'Lưu trong trình duyệt của bạn, không gửi đi đâu ngoài Google.')),
+      h('label', { for: 'in-folder' }, 'Thư mục truyện trên Drive', folderIn,
+        h('span', { class: 'hint' }, 'Thư mục gốc chứa các thư mục con, mỗi thư mục con là một truyện.')),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', type: 'submit' }, 'Kết nối'),
+        h('button', { class: 'btn', type: 'button', onclick: function () {
+          cfg = { demo: true }; store.set('cfg', cfg);
+          state = { stories: null, chapters: {}, texts: {} };
+          if (location.hash && location.hash !== '#/' && location.hash !== '#') location.hash = '#/'; else route();
+        } }, 'Xem thử với truyện mẫu')
+      )
+    );
+
+    show(h('section', { class: 'setup' },
+      h('div', { class: 'eyebrow' }, 'Đọc truyện từ Google Drive'),
+      h('h1', null, 'Tủ Truyện'),
+      h('p', { class: 'muted' }, 'Trỏ trang này vào một thư mục Drive và đọc truyện ngay trên điện thoại hay máy tính, có nhớ chương đang đọc.'),
+      form,
+      h('details', null,
+        h('summary', null, 'Cách lấy API key và sắp xếp thư mục'),
+        h('ol', null,
+          h('li', null, 'Vào Google Cloud Console, tạo project, bật ', h('b', null, 'Google Drive API'), '.'),
+          h('li', null, 'Mục Credentials, tạo ', h('b', null, 'API key'), '. Nên giới hạn key theo tên miền (HTTP referrer) của trang này.'),
+          h('li', null, 'Trên Drive, mỗi truyện một thư mục, mỗi chương một Google Docs hoặc tệp ', h('code', null, '.txt'), '. Đặt tên có số thứ tự, ví dụ ', h('code', null, '001 - Chương 1'), ', để chương xếp đúng thứ tự.'),
+          h('li', null, 'Chia sẻ thư mục gốc ở chế độ ', h('b', null, 'Bất kỳ ai có đường liên kết, quyền Người xem'), ', rồi dán liên kết vào ô bên trên.')
+        )
+      )
+    ));
+  }
+
+  function resetConfig() {
+    cfg = null; store.del('cfg');
+    state = { stories: null, chapters: {}, texts: {} };
+    closeSheet();
+    if (location.hash && location.hash !== '#/' && location.hash !== '#') location.hash = '#/'; else route();
+  }
+
+  /* ---------- Thư viện ---------- */
+  function viewLibrary(my) {
+    reader = null;
+    setBar({ title: 'Tủ Truyện', settings: true });
+    loading();
+    return loadStories().then(function (stories) {
+      if (my !== navId) return;
+      window.scrollTo(0, 0);
+
+      var latest = null;
+      stories.forEach(function (s) {
+        var p = getProgress(s.id);
+        if (p && (!latest || p.t > latest.p.t)) latest = { s: s, p: p };
+      });
+
+      var nodes = [];
+      if (latest) {
+        nodes.push(h('a', { class: 'resume', href: link('s', latest.s.id, 'c', latest.p.ch) },
+          h('span', { class: 'eyebrow' }, 'Đọc tiếp'),
+          h('strong', null, latest.s.name),
+          h('span', { class: 'small' }, cleanName(latest.p.name || ''))
+        ));
+      }
+      nodes.push(h('div', { class: 'section-head' },
+        h('h2', null, 'Truyện'),
+        h('span', { class: 'muted small' }, stories.length + ' truyện')
+      ));
+      var listEl = h('ul', { class: 'list' });
+      function fillStories(q) {
+        var rows = stories.filter(function (s) { return !q || fold(s.name).indexOf(q) >= 0; }).map(function (s) {
+          var p = getProgress(s.id);
+          return h('li', null,
+            h('a', { class: 'item', href: link('s', s.id) },
+              h('span', { class: 'item-title' }, s.name),
+              h('span', { class: 'item-meta' }, p ? 'Đang đọc' : '')
+            ));
+        });
+        if (!rows.length) rows = [h('li', null, h('div', { class: 'state' }, 'Không có truyện nào khớp.'))];
+        listEl.replaceChildren.apply(listEl, rows);
+      }
+      fillStories('');
+      if (stories.length > 5) nodes.push(searchBox('Tìm truyện', fillStories));
+      nodes.push(listEl);
+      if (cfg.demo) {
+        nodes.push(h('div', { class: 'demo-note small' },
+          h('div', null, 'Đây là truyện mẫu do trang tạo sẵn để bạn xem thử giao diện.'),
+          h('button', { class: 'link-btn', type: 'button', onclick: resetConfig }, 'Kết nối Google Drive của bạn')
+        ));
+      }
+      show(nodes);
+    });
+  }
+
+  /* ---------- Danh sách chương ---------- */
+  function viewStory(my, sid) {
+    reader = null;
+    setBar({ title: 'Tủ Truyện', back: '#/', settings: true });
+    loading();
+    return Promise.all([loadStories(), loadChapters(sid)]).then(function (res) {
+      if (my !== navId) return;
+      var story = res[0].filter(function (s) { return s.id === sid; })[0];
+      var chs = res[1];
+      if (!story) throw new Error('Không tìm thấy truyện này.');
+      window.scrollTo(0, 0);
+      setBar({ title: story.name, back: '#/', settings: true });
+
+      var p = getProgress(sid);
+      var target = chs[0];
+      var label = 'Bắt đầu đọc';
+      if (p) {
+        var found = chs.filter(function (c) { return c.id === p.ch; })[0];
+        if (found) { target = found; label = 'Đọc tiếp'; }
+      }
+
+      var ordered = prefs.desc ? chs.slice().reverse() : chs;
+      var toggle = h('button', { class: 'link-btn', type: 'button', onclick: function () {
+        prefs.desc = !prefs.desc; store.set('prefs', prefs); viewStory(navId, sid);
+      } }, prefs.desc ? 'Mới nhất trước' : 'Cũ nhất trước');
+
+      var done = store.get('dl:' + sid, []);
+      var dlBtn = null;
+      if (!cfg.demo && window.caches && chs.length) {
+        var have = chs.filter(function (c) { return done.indexOf(c.id) >= 0; }).length;
+        dlBtn = h('button', { class: 'btn', type: 'button' },
+          have === chs.length ? 'Đã tải ' + have + ' chương · Cập nhật' : 'Tải về đọc offline (' + have + '/' + chs.length + ')');
+        dlBtn.addEventListener('click', function () { downloadStory(sid, chs, dlBtn); });
+      }
+
+      var listEl = h('ul', { class: 'list' });
+      function fillChapters(q) {
+        var rows = ordered.filter(function (c) { return !q || fold(c.name).indexOf(q) >= 0; }).map(function (c) {
+          var cur = p && p.ch === c.id;
+          var saved = done.indexOf(c.id) >= 0;
+          return h('li', null,
+            h('a', { class: 'item' + (cur ? ' current' : ''), href: link('s', sid, 'c', c.id) },
+              h('span', { class: 'item-title' }, cleanName(c.name)),
+              cur ? h('span', { class: 'tag' }, 'Đang đọc') : (saved ? h('span', { class: 'item-meta' }, 'Đã tải') : null)
+            ));
+        });
+        if (!rows.length) rows = [h('li', null, h('div', { class: 'state' }, 'Không có chương nào khớp.'))];
+        listEl.replaceChildren.apply(listEl, rows);
+      }
+      fillChapters('');
+
+      show(
+        h('div', { class: 'story-head' },
+          h('div', { class: 'eyebrow' }, chs.length + ' chương'),
+          h('h1', null, story.name),
+          target ? h('div', { class: 'row' },
+            h('a', { class: 'btn primary', href: link('s', sid, 'c', target.id) }, label + (label === 'Đọc tiếp' ? ': ' + cleanName(target.name) : ''))
+          ) : null,
+          dlBtn ? h('div', { class: 'dl-row' }, dlBtn) : null
+        ),
+        h('div', { class: 'section-head' }, h('h2', null, 'Mục lục'), toggle),
+        chs.length > 8 ? searchBox('Tìm chương theo tên hoặc số', fillChapters) : null,
+        chs.length ? listEl : h('div', { class: 'state' }, 'Truyện này chưa có chương nào.')
+      );
+    });
+  }
+
+  /* Tải cả truyện về máy để đọc khi mất mạng */
+  function downloadStory(sid, chs, btn) {
+    var my = navId;
+    var set = store.get('dl:' + sid, []);
+    var todo = chs.filter(function (c) { return set.indexOf(c.id) < 0; });
+    if (!todo.length) todo = chs.slice();
+    var total = todo.length, n = 0, failed = 0;
+    btn.setAttribute('aria-disabled', 'true');
+    btn.textContent = 'Đang tải 0/' + total + '…';
+    function worker() {
+      if (!todo.length) return Promise.resolve();
+      var c = todo.shift();
+      return fetchText(c, true).then(function () {
+        var s = store.get('dl:' + sid, []);
+        if (s.indexOf(c.id) < 0) { s.push(c.id); store.set('dl:' + sid, s); }
+      }).catch(function () { failed++; }).then(function () {
+        n++;
+        btn.textContent = 'Đang tải ' + n + '/' + total + '…';
+        return worker();
+      });
+    }
+    Promise.all([worker(), worker(), worker()]).then(function () {
+      if (failed) btn.textContent = 'Xong, ' + failed + ' chương lỗi. Bấm để thử lại';
+      btn.removeAttribute('aria-disabled');
+      if (my === navId && !failed) route();
+    });
+  }
+
+  /* ---------- Trang đọc ---------- */
+  function viewReader(my, sid, cid) {
+    setBar({ title: 'Tủ Truyện', back: link('s', sid), settings: true });
+    loading();
+    return Promise.all([loadStories(), loadChapters(sid)]).then(function (res) {
+      if (my !== navId) return;
+      var story = res[0].filter(function (s) { return s.id === sid; })[0];
+      var chs = res[1];
+      var idx = -1;
+      chs.forEach(function (c, i) { if (c.id === cid) idx = i; });
+      if (!story || idx < 0) throw new Error('Không tìm thấy chương này.');
+      var file = chs[idx];
+      return fetchText(file).then(function (text) {
+        if (my !== navId) return;
+        var prog = getProgress(sid);
+        var y = prog && prog.ch === cid ? (prog.y || 0) : 0;
+
+        var paras = text.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+        var article = h('article', { class: 'reader' },
+          h('h1', null, cleanName(file.name)),
+          paras.map(function (t) { return h('p', null, t); })
+        );
+
+        setBar({ title: story.name, back: link('s', sid), settings: true, nav: true });
+        var prev = chs[idx - 1], next = chs[idx + 1];
+        setNav($('#nav-prev'), prev ? link('s', sid, 'c', prev.id) : null);
+        setNav($('#nav-next'), next ? link('s', sid, 'c', next.id) : null);
+        $('#nav-toc').setAttribute('href', link('s', sid));
+
+        show(article);
+        reader = { sid: sid, cid: cid, name: file.name, timer: null };
+        saveProgress(sid, { ch: cid, name: file.name, y: y, t: Date.now() });
+        requestAnimationFrame(function () {
+          var max = document.documentElement.scrollHeight - window.innerHeight;
+          window.scrollTo(0, max > 0 ? Math.round(y * max) : 0);
+          updateProgress();
+        });
+        if (next) fetchText(next).catch(function () {});
+      });
+    });
+  }
+
+  function setNav(a, href) {
+    if (href) { a.setAttribute('href', href); a.removeAttribute('aria-disabled'); }
+    else { a.setAttribute('href', '#/'); a.setAttribute('aria-disabled', 'true'); }
+  }
+
+  function scrollFraction() {
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 1;
+  }
+  function updateProgress() {
+    if (!reader) return;
+    $('#progress').style.width = (scrollFraction() * 100).toFixed(1) + '%';
+  }
+  window.addEventListener('scroll', function () {
+    if (!reader) return;
+    updateProgress();
+    clearTimeout(reader.timer);
+    var r = reader;
+    r.timer = setTimeout(function () {
+      saveProgress(r.sid, { ch: r.cid, name: r.name, y: scrollFraction(), t: Date.now() });
+    }, 400);
+  }, { passive: true });
+
+  document.addEventListener('keydown', function (e) {
+    if (!reader || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (/INPUT|TEXTAREA|SELECT/.test(tag) || !$('#sheet').hidden) return;
+    var a = e.key === 'ArrowLeft' ? $('#nav-prev') : e.key === 'ArrowRight' ? $('#nav-next') : null;
+    if (a && !a.hasAttribute('aria-disabled')) { location.hash = a.getAttribute('href'); }
+  });
+
+  /* ---------- Điều hướng ---------- */
+  function parseHash() {
+    return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+  }
+  function route() {
+    var my = ++navId;
+    if (!cfg) { viewSetup(); return; }
+    var p = parseHash();
+    var task;
+    if (p[0] === 's' && p[1] && p[2] === 'c' && p[3]) task = viewReader(my, p[1], p[3]);
+    else if (p[0] === 's' && p[1]) task = viewStory(my, p[1]);
+    else task = viewLibrary(my);
+    task.catch(function (e) { if (my === navId) showError(e); });
+  }
+  window.addEventListener('hashchange', function () {
+    window.scrollTo(0, 0);
+    route();
+  });
+
+  /* ---------- Cài đặt ---------- */
+  var FONTS = {
+    serif: "'Literata', Georgia, 'Times New Roman', serif",
+    sans: "'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif"
+  };
+  function applyPrefs() {
+    var root = document.documentElement;
+    root.style.setProperty('--fs', prefs.fs + 'px');
+    root.style.setProperty('--lh', String(prefs.lh));
+    root.style.setProperty('--read-font', FONTS[prefs.font] || FONTS.serif);
+    if (prefs.theme === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', prefs.theme);
+    $('#fs').value = prefs.fs; $('#fs-out').textContent = prefs.fs + 'px';
+    $('#lh').value = prefs.lh; $('#lh-out').textContent = Number(prefs.lh).toFixed(1);
+    Array.prototype.forEach.call(document.querySelectorAll('#seg-font button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.v === prefs.font));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#seg-theme button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.v === prefs.theme));
+    });
+  }
+  function savePrefs() { store.set('prefs', prefs); applyPrefs(); }
+
+  function openSheet() { $('#sheet').hidden = false; $('#sheet-backdrop').hidden = false; }
+  function closeSheet() { $('#sheet').hidden = true; $('#sheet-backdrop').hidden = true; }
+
+  $('#btn-settings').addEventListener('click', openSheet);
+  $('#sheet-close').addEventListener('click', closeSheet);
+  $('#sheet-backdrop').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+  $('#fs').addEventListener('input', function (e) { prefs.fs = Number(e.target.value); savePrefs(); });
+  $('#lh').addEventListener('input', function (e) { prefs.lh = Number(e.target.value); savePrefs(); });
+  $('#seg-font').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return; prefs.font = b.dataset.v; savePrefs();
+  });
+  $('#seg-theme').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return; prefs.theme = b.dataset.v; savePrefs();
+  });
+  $('#btn-reset-cfg').addEventListener('click', resetConfig);
+
+  var armed = null;
+  $('#btn-clear-progress').addEventListener('click', function (e) {
+    var btn = e.currentTarget;
+    if (!armed) {
+      btn.textContent = 'Bấm lần nữa để xóa';
+      armed = setTimeout(function () { armed = null; btn.textContent = 'Xóa tiến độ đọc trên máy này'; }, 3000);
+      return;
+    }
+    clearTimeout(armed); armed = null;
+    store.keys().forEach(function (k) { if (k.indexOf('progress:') === 0) store.del(k); });
+    btn.textContent = 'Đã xóa tiến độ đọc';
+    setTimeout(function () { btn.textContent = 'Xóa tiến độ đọc trên máy này'; }, 2000);
+    reader = null;
+    route();
+  });
+
+  var armedOffline = null;
+  $('#btn-clear-offline').addEventListener('click', function (e) {
+    var btn = e.currentTarget;
+    var label = 'Xóa truyện đã tải về máy';
+    if (!armedOffline) {
+      btn.textContent = 'Bấm lần nữa để xóa';
+      armedOffline = setTimeout(function () { armedOffline = null; btn.textContent = label; }, 3000);
+      return;
+    }
+    clearTimeout(armedOffline); armedOffline = null;
+    store.keys().forEach(function (k) { if (k.indexOf('dl:') === 0) store.del(k); });
+    (window.caches ? caches.delete(CACHE) : Promise.resolve()).catch(function () {}).then(function () {
+      state = { stories: null, chapters: {}, texts: {} };
+      btn.textContent = 'Đã xóa';
+      setTimeout(function () { btn.textContent = label; }, 2000);
+      route();
+    });
+  });
+
+  /* ---------- Khởi động ---------- */
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    });
+  }
+  applyPrefs();
+  route();
+})();
+</script>
+</body>
+</html>
