@@ -528,7 +528,14 @@
     document.title = opts.title && opts.title !== 'Tủ Truyện' ? opts.title + ' · Tủ Truyện' : 'Tủ Truyện';
   }
   function show() {
-    view.replaceChildren.apply(view, arguments);
+    var nodes = [];
+    (function add(list) {
+      Array.prototype.forEach.call(list, function (x) {
+        if (x == null || x === false) return;
+        if (Array.isArray(x)) add(x); else nodes.push(x);
+      });
+    })(arguments);
+    view.replaceChildren.apply(view, nodes);
   }
   function loading() { show(h('div', { class: 'state' }, 'Đang tải…')); }
 
