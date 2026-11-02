@@ -1,6 +1,6 @@
 /* Service worker của Tủ Truyện: lưu khung ứng dụng để mở được khi mất mạng.
    Nội dung truyện được trang tự lưu riêng (xem CACHE trong index.html). */
-var SHELL = 'tutruyen-shell-v1';
+var SHELL = 'tutruyen-shell-v3';
 var ASSETS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', function (e) {
