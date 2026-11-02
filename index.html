@@ -321,6 +321,25 @@
   .seg button { padding: 9px 6px; border: 1px solid var(--line); background: transparent; border-radius: 10px; font-size: 0.875rem; }
   .seg button[aria-pressed=true] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 
+  /* Form thêm truyện */
+  .form { display: grid; gap: 22px; margin-top: 6px; }
+  .field { display: grid; gap: 8px; }
+  .lbl { font-weight: 600; font-size: 0.9rem; }
+  textarea {
+    width: 100%; min-height: 8.5rem; resize: vertical; font: 400 16px/1.5 var(--font-ui);
+    padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink);
+  }
+  input[type=file] { display: none; }
+  .poster-pick { display: flex; gap: 14px; align-items: flex-start; }
+  .poster-pick .cover { width: 7.2rem; flex: none; }
+  .poster-side { display: grid; gap: 10px; min-width: 0; flex: 1; }
+  .form-msg { font-size: 0.875rem; color: var(--ink-soft); min-height: 1.2em; }
+  .form-msg.err { color: var(--danger); }
+  .form-msg.ok { color: var(--accent); }
+  .form-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .btn.danger { color: var(--danger); }
+
   @media (prefers-reduced-motion: reduce) {
     #bar, #reader-nav, .dots span { transition: none; }
     .hero-track { scroll-behavior: auto; }
@@ -339,6 +358,9 @@
     </a>
     <div id="bar-title">Tủ Truyện Tranh</div>
     <span id="pg"></span>
+    <a id="btn-add" class="icon-btn" href="#/add" aria-label="Thêm truyện" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    </a>
     <button id="btn-settings" class="icon-btn" type="button" aria-label="Cài đặt" hidden>
       <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
     </button>
@@ -561,7 +583,7 @@
   var reader = null;
   var lastTab = '#/';
 
-  function fresh() { return { comics: null, meta: {}, metaP: {}, pages: {} }; }
+  function fresh() { return { root: null, comics: null, meta: {}, metaP: {}, pages: {} }; }
 
   /* ---------- Lớp lấy dữ liệu ---------- */
   function DriveError(status, detail) { this.status = status; this.detail = detail || ''; }
@@ -620,15 +642,101 @@
   }
 
   function imgUrl(f) {
+    if (f.direct) return f.direct;
     if (f.id.indexOf('demo|') === 0) return demoSvg(f);
     return API + '/files/' + f.id + '?alt=media&supportsAllDrives=true&key=' + encodeURIComponent(cfg.key);
   }
   function thumbUrl(f, w) {
-    if (!f.thumbnailLink) return imgUrl(f);
+    if (f.direct || !f.thumbnailLink) return imgUrl(f);
     return /=s\d+/.test(f.thumbnailLink) ? f.thumbnailLink.replace(/=s\d+.*$/, '=w' + (w || 480)) : f.thumbnailLink;
   }
 
-  function rootId() { return cfg.demo ? 'demo-root' : cfg.folder; }
+  function rootId() { return cfg.demo ? 'demo-root' : (cfg.folder || ''); }
+
+  /* ---------- Truyện thêm thủ công (lưu trên máy) ---------- */
+  function customList() { return store.get('custom', []); }
+  function customDef(id) { return customList().filter(function (d) { return d.id === id; })[0] || null; }
+  function customComics() {
+    return customList().map(function (d) {
+      return { id: d.id, name: d.name, mimeType: FOLDER, modifiedTime: new Date(d.created || Date.now()).toISOString(), custom: true };
+    });
+  }
+  function posterFile(p) {
+    if (!p) return null;
+    if (p.type === 'drive') return { id: p.id, name: 'poster.jpg', mimeType: 'image/jpeg' };
+    return { id: 'poster|' + String(p.url).length + '|' + String(p.url).slice(-12), name: 'poster', mimeType: 'image/jpeg', direct: p.url };
+  }
+  function customMeta(d) {
+    var info = { title: d.name, genres: (d.genres || []).slice(), description: '', author: '', status: '' };
+    var chP;
+    if (d.mode === 'list') {
+      chP = Promise.resolve((d.chapters || []).map(function (c) { return { id: c.id, name: c.name, mimeType: FOLDER }; }));
+    } else {
+      chP = listFolder(d.folder).then(function (files) {
+        var chs = files.filter(isFolder).sort(byName);
+        if (chs.length) return chs;
+        var imgs = files.filter(isImage).sort(byName);
+        if (!imgs.length) return [];
+        state.pages[d.folder] = imgs;
+        return [{ id: d.folder, name: 'Toàn bộ', mimeType: FOLDER }];
+      });
+    }
+    return chP.then(function (chs) {
+      var meta = { chapters: chs, cover: posterFile(d.poster), banner: null, info: info };
+      state.meta[d.id] = meta;
+      return meta;
+    });
+  }
+  function driveId(s) {
+    s = String(s || '').trim();
+    var m = s.match(/\/folders\/([\w-]{10,})/) || s.match(/\/d\/([\w-]{10,})/) || s.match(/[?&]id=([\w-]{10,})/);
+    if (m) return m[1];
+    return /^[\w-]{20,}$/.test(s) ? s : '';
+  }
+  function parseChapterLines(text) {
+    var out = [], bad = [];
+    text.split(/\n+/).forEach(function (raw, i) {
+      var line = raw.trim();
+      if (!line) return;
+      var um = line.match(/https?:\/\/\S+/), name = '', target = line;
+      if (um) { target = um[0]; name = line.replace(um[0], ''); }
+      else if (line.indexOf('|') >= 0) { var parts = line.split('|'); name = parts[0]; target = parts.slice(1).join('|'); }
+      name = name.replace(/^[\s|:–—-]+|[\s|:–—-]+$/g, '').trim();
+      var id = driveId(target);
+      if (!id) bad.push(raw.trim());
+      else out.push({ id: id, name: name || 'Chương ' + (out.length + 1) });
+    });
+    return { chapters: out, bad: bad };
+  }
+  function posterFromLink(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    if (/drive\.google\.com|docs\.google\.com/.test(s)) { var did = driveId(s); return did ? { type: 'drive', id: did } : null; }
+    if (/^https?:\/\//i.test(s)) return { type: 'url', url: s };
+    var bare = driveId(s);
+    return bare ? { type: 'drive', id: bare } : null;
+  }
+  function resizePoster(file) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onerror = function () { rej(new Error('Không đọc được ảnh.')); };
+      fr.onload = function () {
+        var img = new Image();
+        img.onerror = function () { rej(new Error('Tệp này không phải ảnh hợp lệ.')); };
+        img.onload = function () {
+          var W = 480, H = 640, c = document.createElement('canvas');
+          c.width = W; c.height = H;
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+          var s = Math.max(W / img.width, H / img.height), w = img.width * s, hh = img.height * s;
+          ctx.drawImage(img, (W - w) / 2, (H - hh) / 2, w, hh);
+          res(c.toDataURL('image/jpeg', 0.82));
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
 
   /* Thông tin truyện: tệp info.json trong thư mục truyện (không bắt buộc) */
   function normInfo(o) {
@@ -652,17 +760,32 @@
       .catch(function () { return null; });
   }
 
-  function loadComics() {
-    if (state.comics) return Promise.resolve(state.comics);
+  function loadRoot() {
+    if (state.root) return Promise.resolve(state.root);
+    if (!rootId()) return Promise.resolve([]);
     return listFolder(rootId()).then(function (files) {
       var folders = files.filter(isFolder).sort(byName);
-      if (folders.length) { state.comics = folders; return folders; }
+      if (folders.length) return folders;
       var imgs = files.filter(isImage).sort(byName);
-      if (!imgs.length) throw new Error('Thư mục này chưa có thư mục truyện hoặc ảnh nào. Hãy tạo mỗi truyện thành một thư mục con, trong đó mỗi chương là một thư mục chứa ảnh các trang.');
+      if (!imgs.length) {
+        var err = new Error('Thư mục này chưa có thư mục truyện hoặc ảnh nào. Hãy tạo mỗi truyện thành một thư mục con, trong đó mỗi chương là một thư mục chứa ảnh các trang.');
+        err.empty = true;
+        throw err;
+      }
       var id = rootId();
       state.pages[id] = imgs;
       state.meta[id] = { chapters: [{ id: id, name: 'Toàn bộ', mimeType: FOLDER }], cover: imgs[0], banner: null, info: null };
-      state.comics = [{ id: id, name: 'Truyện của bạn', mimeType: FOLDER }];
+      return [{ id: id, name: 'Truyện của bạn', mimeType: FOLDER }];
+    });
+  }
+
+  function loadComics() {
+    return loadRoot().catch(function (e) {
+      if (e && e.empty && customList().length) return [];
+      throw e;
+    }).then(function (root) {
+      state.root = root;
+      state.comics = root.concat(customComics());
       return state.comics;
     });
   }
@@ -670,7 +793,8 @@
   function loadMeta(sid) {
     if (state.meta[sid]) return Promise.resolve(state.meta[sid]);
     if (state.metaP[sid]) return state.metaP[sid];
-    var p = listFolder(sid).then(function (files) {
+    var cdef = customDef(sid);
+    var p = cdef ? customMeta(cdef) : listFolder(sid).then(function (files) {
       var chs = files.filter(isFolder).sort(byName);
       var imgs = files.filter(isImage);
       var cover = imgs.filter(isCover)[0] || null;
@@ -809,6 +933,7 @@
     $('#bar-title').textContent = opts.title || APP;
     $('#pg').textContent = opts.counter || '';
     $('#btn-settings').hidden = !opts.settings;
+    $('#btn-add').hidden = !opts.add;
     $('#reader-nav').hidden = !opts.nav;
     $('#tabs').hidden = !opts.tabs;
     Array.prototype.forEach.call(document.querySelectorAll('#tabs a'), function (a) {
@@ -820,7 +945,7 @@
   function tabView(tab, cls) {
     view.className = 'wrap tab-view' + (cls ? ' ' + cls : '');
     lastTab = location.hash && location.hash !== '#' ? location.hash : '#/';
-    setBar({ title: tab === 'home' ? APP : ({ genres: 'Thể loại', fav: 'Yêu thích', history: 'Lịch sử' })[tab], settings: true, tabs: true, tab: tab });
+    setBar({ title: tab === 'home' ? APP : ({ genres: 'Thể loại', fav: 'Yêu thích', history: 'Lịch sử' })[tab], settings: true, add: true, tabs: true, tab: tab });
   }
   function show() {
     var nodes = [];
@@ -926,13 +1051,13 @@
     setBar({ title: APP });
     var saved = cfg && !cfg.demo ? cfg : { key: '', folder: '' };
     var keyIn = h('input', { id: 'in-key', type: 'password', autocomplete: 'off', spellcheck: 'false', value: saved.key || '', required: true });
-    var folderIn = h('input', { id: 'in-folder', type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Dán đường liên kết hoặc ID thư mục', value: saved.folder || '', required: true });
+    var folderIn = h('input', { id: 'in-folder', type: 'text', autocomplete: 'off', spellcheck: 'false', placeholder: 'Dán đường liên kết hoặc ID thư mục (không bắt buộc)', value: saved.folder || '' });
 
     var form = h('form', {
       onsubmit: function (ev) {
         ev.preventDefault();
         var key = keyIn.value.trim(), folder = parseFolder(folderIn.value);
-        if (!key || !folder) return;
+        if (!key) return;
         cfg = { key: key, folder: folder };
         store.set('cfg', cfg);
         state = fresh();
@@ -943,7 +1068,7 @@
         keyIn,
         h('span', { class: 'hint' }, 'Lưu trong trình duyệt của bạn, không gửi đi đâu ngoài Google.')),
       h('label', { for: 'in-folder' }, 'Thư mục truyện trên Drive', folderIn,
-        h('span', { class: 'hint' }, 'Thư mục gốc chứa các thư mục con, mỗi thư mục con là một bộ truyện.')),
+        h('span', { class: 'hint' }, 'Không bắt buộc. Thư mục gốc chứa các thư mục con, mỗi thư mục con là một bộ truyện. Bạn cũng có thể bỏ trống và thêm từng truyện bằng nút + sau khi vào app.')),
       h('div', { class: 'row' },
         h('button', { class: 'btn primary', type: 'submit' }, 'Kết nối'),
         h('button', { class: 'btn', type: 'button', onclick: function () {
@@ -1059,11 +1184,19 @@
     return loadComics().then(function (comics) {
       if (my !== navId) return;
       window.scrollTo(0, 0);
+      if (!comics.length) {
+        show(h('div', { class: 'state' },
+          h('p', null, 'Chưa có truyện nào.'),
+          h('a', { class: 'btn primary', href: '#/add' }, '+ Thêm truyện')
+        ));
+        return;
+      }
       var holder = h('div');
       var hero = buildHero(comics);
       show(
         hero.el,
         holder,
+        h('div', { class: 'row', style: 'margin-top:24px' }, h('a', { class: 'btn ghost', href: '#/add' }, '+ Thêm truyện')),
         cfg.demo ? h('div', { class: 'demo-note small' },
           h('div', null, 'Đây là truyện mẫu do trang tự vẽ để bạn xem thử giao diện.'),
           h('button', { class: 'link-btn', type: 'button', onclick: resetConfig }, 'Kết nối Google Drive của bạn')
@@ -1195,6 +1328,225 @@
       );
       draw();
       loadAllMeta(entries.map(function (x) { return x.c; }), function () {});
+    });
+  }
+
+  /* ---------- Thêm / sửa truyện ---------- */
+  function viewForm(my, editId) {
+    view.className = 'wrap';
+    var def = editId ? customDef(editId) : null;
+    if (editId && !def) return Promise.reject(new Error('Không tìm thấy truyện này.'));
+    setBar({ title: def ? 'Sửa truyện' : 'Thêm truyện', back: def ? link('s', def.id) : lastTab });
+    return loadComics().catch(function () { return []; }).then(function () {
+      if (my !== navId) return;
+      window.scrollTo(0, 0);
+
+      var poster = def && def.poster ? Object.assign({}, def.poster) : null;
+      var mode = def ? def.mode : 'folder';
+      var sel = def ? (def.genres || []).slice() : [];
+      var DRIVE = 'https://drive.google.com/drive/folders/';
+
+      /* Tên */
+      var nameIn = h('input', { type: 'text', id: 'f-name', maxlength: '120', autocomplete: 'off', placeholder: 'Ví dụ: Mèo thợ rèn', value: def ? def.name : '' });
+
+      /* Poster */
+      var cover = h('div', { class: 'cover', style: '--h:210' }, h('span', { class: 'cover-ph' }, '+'));
+      var pMsg = h('div', { class: 'form-msg', role: 'status' });
+      var linkIn = h('input', { type: 'text', id: 'f-poster-link', autocomplete: 'off', spellcheck: 'false', placeholder: 'Hoặc dán link ảnh / link Google Drive',
+        value: poster ? (poster.type === 'url' ? poster.url : poster.type === 'drive' ? 'https://drive.google.com/file/d/' + poster.id : '') : '' });
+      var fileIn = h('input', { type: 'file', id: 'f-file', accept: 'image/*' });
+      function drawPoster() {
+        Array.prototype.forEach.call(cover.querySelectorAll('img'), function (i) { i.remove(); });
+        cover.classList.remove('has-img');
+        var f = posterFile(poster);
+        if (f) fillCover(cover, f, 480);
+      }
+      fileIn.addEventListener('change', function () {
+        var f = fileIn.files && fileIn.files[0];
+        if (!f) return;
+        pMsg.className = 'form-msg'; pMsg.textContent = 'Đang xử lý ảnh…';
+        resizePoster(f).then(function (url) {
+          poster = { type: 'data', url: url };
+          linkIn.value = '';
+          pMsg.textContent = 'Đã chọn ảnh.';
+          drawPoster();
+        }).catch(function (e) { pMsg.className = 'form-msg err'; pMsg.textContent = e.message; });
+        fileIn.value = '';
+      });
+      linkIn.addEventListener('change', function () {
+        var v = linkIn.value.trim();
+        if (!v) { if (poster && poster.type !== 'data') { poster = null; drawPoster(); } pMsg.textContent = ''; return; }
+        var p = posterFromLink(v);
+        if (!p) { pMsg.className = 'form-msg err'; pMsg.textContent = 'Link poster không hợp lệ.'; return; }
+        poster = p; pMsg.className = 'form-msg'; pMsg.textContent = ''; drawPoster();
+      });
+      drawPoster();
+
+      /* Chương */
+      var folderIn = h('input', { type: 'text', id: 'f-folder', autocomplete: 'off', spellcheck: 'false', placeholder: 'Dán link thư mục Google Drive của truyện',
+        value: def && def.mode === 'folder' ? DRIVE + def.folder : '' });
+      var listIn = h('textarea', { id: 'f-list', spellcheck: 'false', placeholder: 'Mỗi dòng một chương:\nChương 1 | https://drive.google.com/drive/folders/...\nChương 2 | https://drive.google.com/drive/folders/...' });
+      if (def && def.mode === 'list') listIn.value = def.chapters.map(function (c) { return c.name + ' | ' + DRIVE + c.id; }).join('\n');
+      var cMsg = h('div', { class: 'form-msg', role: 'status' });
+      var checkBtn = h('button', { class: 'btn', type: 'button' }, 'Kiểm tra thư mục');
+      var folderBox = h('div', { class: 'field' },
+        folderIn,
+        h('div', { class: 'hint' }, 'Thư mục này chứa các thư mục con, mỗi thư mục con là một chương (trong đó là ảnh các trang). Nếu thư mục chỉ có ảnh thì tính là 1 chương.'),
+        h('div', { class: 'row' }, checkBtn)
+      );
+      var listBox = h('div', { class: 'field' },
+        listIn,
+        h('div', { class: 'hint' }, 'Mỗi chương là một thư mục Drive chứa ảnh. Tên chương viết trước dấu | , bỏ trống thì tự đặt "Chương 1, 2, …".')
+      );
+      function setMsg(el, cls, text) { el.className = 'form-msg' + (cls ? ' ' + cls : ''); el.textContent = text; }
+      function countList() {
+        var r = parseChapterLines(listIn.value);
+        if (!listIn.value.trim()) { setMsg(cMsg, '', ''); return; }
+        if (r.bad.length) setMsg(cMsg, 'err', r.chapters.length + ' chương hợp lệ. Có ' + r.bad.length + ' dòng chưa có link Drive hợp lệ.');
+        else setMsg(cMsg, 'ok', 'Số chương: ' + r.chapters.length);
+      }
+      listIn.addEventListener('input', countList);
+      checkBtn.addEventListener('click', function () {
+        var id = driveId(folderIn.value);
+        if (!id) { setMsg(cMsg, 'err', 'Link thư mục chưa hợp lệ.'); return; }
+        setMsg(cMsg, '', 'Đang kiểm tra…');
+        listFolder(id).then(function (files) {
+          var fs = files.filter(isFolder).length, im = files.filter(isImage).length;
+          if (fs) setMsg(cMsg, 'ok', 'Tìm thấy ' + fs + ' chương.');
+          else if (im) setMsg(cMsg, 'ok', 'Thư mục có ' + im + ' ảnh, sẽ tính là 1 chương.');
+          else setMsg(cMsg, 'err', 'Thư mục trống, hoặc chưa chia sẻ ở chế độ "Bất kỳ ai có đường liên kết".');
+        }).catch(function (e) { setMsg(cMsg, 'err', explain(e)); });
+      });
+      var seg = h('div', { class: 'seg', id: 'f-mode' },
+        h('button', { type: 'button', 'data-v': 'folder' }, 'Một thư mục chứa các chương'),
+        h('button', { type: 'button', 'data-v': 'list' }, 'Từng chương một')
+      );
+      function drawMode() {
+        Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === mode)); });
+        folderBox.hidden = mode !== 'folder';
+        listBox.hidden = mode !== 'list';
+        if (mode === 'list') countList(); else setMsg(cMsg, '', '');
+      }
+      seg.addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        mode = b.dataset.v; drawMode();
+      });
+      drawMode();
+
+      /* Thể loại */
+      var gChips = h('div', { class: 'chips' });
+      var gIn = h('input', { type: 'text', id: 'f-gnew', placeholder: 'Thêm thể loại mới', maxlength: '24', autocomplete: 'off', style: 'flex:1 1 10rem;width:auto;min-width:0' });
+      function drawG() {
+        var names = allGenres();
+        sel.forEach(function (g) { if (names.indexOf(g) < 0) names.push(g); });
+        gChips.replaceChildren.apply(gChips, names.map(function (g) {
+          return h('button', { class: 'chip', type: 'button', 'aria-pressed': String(sel.indexOf(g) >= 0), onclick: function () {
+            var i = sel.indexOf(g);
+            if (i >= 0) sel.splice(i, 1); else sel.push(g);
+            drawG();
+          } }, g);
+        }));
+      }
+      function addG() {
+        var v = gIn.value.trim();
+        if (v && sel.indexOf(v) < 0) sel.push(v);
+        gIn.value = '';
+        drawG();
+      }
+      gIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addG(); } });
+      drawG();
+
+      /* Lưu */
+      var msg = h('div', { class: 'form-msg err', role: 'alert' });
+      function fail(text, focusEl) { msg.textContent = text; if (focusEl) focusEl.focus(); return false; }
+      function save() {
+        msg.textContent = '';
+        var name = nameIn.value.trim();
+        if (!name) return fail('Hãy nhập tên truyện.', nameIn);
+        var pend = linkIn.value.trim();
+        if (pend && (!poster || poster.type !== 'data')) {
+          var pp = posterFromLink(pend);
+          if (!pp) return fail('Link poster không hợp lệ.', linkIn);
+          poster = pp;
+        }
+        var d = {
+          id: def ? def.id : 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name: name, poster: poster, genres: sel.slice(), mode: mode, created: def ? def.created : Date.now()
+        };
+        if (mode === 'folder') {
+          var fid = driveId(folderIn.value);
+          if (!fid) return fail('Hãy dán link thư mục Google Drive chứa các chương.', folderIn);
+          d.folder = fid;
+        } else {
+          var r = parseChapterLines(listIn.value);
+          if (!r.chapters.length) return fail('Hãy nhập ít nhất một chương (tên | link thư mục Drive).', listIn);
+          if (r.bad.length) return fail('Dòng này chưa có link Drive hợp lệ: ' + r.bad[0].slice(0, 60), listIn);
+          d.chapters = r.chapters;
+        }
+        var list = customList().filter(function (x) { return x.id !== d.id; });
+        if (def) { var at = customList().findIndex(function (x) { return x.id === d.id; }); list.splice(Math.max(0, at), 0, d); }
+        else list.unshift(d);
+        store.set('custom', list);
+        if (!customDef(d.id)) return fail('Không lưu được. Bộ nhớ trình duyệt đầy hoặc đang bị chặn.');
+        store.del('ov:' + d.id);
+        delete state.meta[d.id]; delete state.metaP[d.id];
+        location.hash = link('s', d.id);
+        return true;
+      }
+
+      var del = null;
+      if (def) {
+        del = h('button', { class: 'btn danger', type: 'button' }, 'Xóa truyện');
+        var t = null;
+        del.addEventListener('click', function () {
+          if (!t) { del.textContent = 'Bấm lần nữa để xóa'; t = setTimeout(function () { t = null; del.textContent = 'Xóa truyện'; }, 3000); return; }
+          clearTimeout(t);
+          store.set('custom', customList().filter(function (x) { return x.id !== def.id; }));
+          store.del('ov:' + def.id); store.del('progress:' + def.id); store.del('dl:' + def.id);
+          store.set('fav', favs().filter(function (x) { return x !== def.id; }));
+          delete state.meta[def.id]; delete state.metaP[def.id];
+          location.hash = '#/';
+        });
+      }
+
+      show(
+        h('div', { class: 'page-head' }, h('h1', null, def ? 'Sửa truyện' : 'Thêm truyện')),
+        cfg.demo ? h('div', { class: 'demo-note small' },
+          h('div', null, 'Bạn đang xem truyện mẫu. Để đọc được chương từ Google Drive, hãy kết nối API key trước.'),
+          h('button', { class: 'link-btn', type: 'button', onclick: resetConfig }, 'Kết nối Google Drive')
+        ) : null,
+        h('form', { class: 'form', onsubmit: function (ev) { ev.preventDefault(); save(); } },
+          h('div', { class: 'field' }, h('label', { class: 'lbl', for: 'f-name' }, 'Tên truyện'), nameIn),
+          h('div', { class: 'field' },
+            h('div', { class: 'lbl' }, 'Poster'),
+            h('div', { class: 'poster-pick' },
+              cover,
+              h('div', { class: 'poster-side' },
+                h('label', { class: 'btn', for: 'f-file' }, 'Chọn ảnh từ máy'),
+                fileIn,
+                linkIn,
+                h('button', { class: 'link-btn', type: 'button', onclick: function () { poster = null; linkIn.value = ''; pMsg.textContent = ''; drawPoster(); } }, 'Bỏ poster (dùng trang đầu của truyện)'),
+                pMsg
+              )
+            )
+          ),
+          h('div', { class: 'field' },
+            h('div', { class: 'lbl' }, 'Chương (tệp Google Drive)'),
+            seg, folderBox, listBox, cMsg
+          ),
+          h('div', { class: 'field' },
+            h('div', { class: 'lbl' }, 'Thể loại'),
+            gChips,
+            h('div', { class: 'row' }, gIn, h('button', { class: 'btn', type: 'button', onclick: addG }, 'Thêm'))
+          ),
+          msg,
+          h('div', { class: 'form-actions' },
+            h('button', { class: 'btn primary', type: 'submit' }, def ? 'Lưu thay đổi' : 'Thêm truyện'),
+            h('a', { class: 'btn', href: def ? link('s', def.id) : lastTab }, 'Hủy'),
+            del
+          )
+        )
+      );
     });
   }
 
@@ -1363,6 +1715,7 @@
         h('div', { class: 'detail-actions' },
           target ? h('a', { class: 'btn primary', href: link('s', sid, 'c', target.id) }, icon('play'), label) : null,
           heartBtn(sid, 'heart-btn', true),
+          comic.custom ? h('a', { class: 'link-btn', href: '#/edit/' + encodeURIComponent(sid) }, 'Sửa truyện') : null,
           editBtn
         ),
         panelHost,
@@ -1620,6 +1973,8 @@
     if (p[0] === 's' && p[1] && p[2] === 'c' && p[3]) task = viewReader(my, p[1], p[3]);
     else if (p[0] === 's' && p[1]) task = viewStory(my, p[1]);
     else if (p[0] === 'genres') task = viewGenres(my, p[1] || '');
+    else if (p[0] === 'add') task = viewForm(my, '');
+    else if (p[0] === 'edit' && p[1]) task = viewForm(my, p[1]);
     else if (p[0] === 'fav') task = viewFav(my);
     else if (p[0] === 'history') task = viewHistory(my);
     else task = viewHome(my);
